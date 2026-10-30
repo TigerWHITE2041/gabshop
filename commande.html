@@ -1,12 +1,811 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
-<meta charset="UTF-8">
-<meta http-equiv="refresh" content="0; url=boutique.html">
-<title>Redirection - Gabshop</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Gabshop - Commande</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+
+  <style>
+    .confirmation-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+    }
+
+    .confirmation-overlay.open {
+      display: flex;
+    }
+
+    .confirmation-modal {
+      width: 100%;
+      max-width: 520px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 30px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+    }
+
+    .confirmation-modal h2 {
+      margin: 0 0 12px;
+      font-family: 'Fraunces', serif;
+      font-weight: 500;
+      font-size: 1.7rem;
+      line-height: 1.2;
+    }
+
+    .confirmation-intro {
+      margin: 0 0 24px;
+      color: var(--ink-soft);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .confirmation-checkboxes {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-bottom: 26px;
+    }
+
+    .confirmation-checkbox {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      color: var(--ink);
+      font-size: 0.92rem;
+      line-height: 1.5;
+      cursor: pointer;
+    }
+
+    .confirmation-checkbox input {
+      width: 17px;
+      height: 17px;
+      margin: 2px 0 0;
+      flex: 0 0 auto;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .confirmation-checkbox a {
+      color: var(--ink);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .confirmation-checkbox a:hover {
+      opacity: 0.7;
+    }
+
+    .confirmation-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .confirmation-actions button {
+      min-width: 120px;
+    }
+
+    .confirmation-confirm:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    @media (max-width: 600px) {
+      .confirmation-modal {
+        padding: 24px;
+      }
+
+      .confirmation-modal h2 {
+        font-size: 1.45rem;
+      }
+
+      .confirmation-actions {
+        flex-direction: column-reverse;
+      }
+
+      .confirmation-actions button {
+        width: 100%;
+      }
+    }
+  </style>
 </head>
+
 <body>
-<script>window.location.replace('boutique.html');</script>
-<p>Cette page a été déplacée. <a href="boutique.html">Clique ici si tu n'es pas redirigé automatiquement.</a></p>
+
+<header>
+  <div id="site-header"></div>
+</header>
+
+<main>
+  <h1>Passer une commande</h1>
+
+  <form id="order-form" class="order-form">
+    <div>
+      <label for="nom">Nom</label>
+      <input type="text" id="nom" name="nom" required>
+    </div>
+
+    <div>
+      <label for="prenom">Prénom</label>
+      <input type="text" id="prenom" name="prenom" required>
+    </div>
+
+    <div>
+      <label id="couleur-label-text" for="couleur-toggle">Couleur</label>
+      <div class="custom-select" id="couleur-select">
+        <button type="button" class="custom-select-toggle" id="couleur-toggle" aria-haspopup="listbox" aria-expanded="false">
+          <span id="couleur-affichee">Chargement des couleurs...</span>
+          <svg class="caret" viewBox="0 0 10 10" fill="none">
+            <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+
+        <ul class="custom-select-options" id="couleur-options" role="listbox" aria-labelledby="couleur-label-text">
+          <!-- Chargé dynamiquement depuis Firestore -->
+        </ul>
+
+        <input type="hidden" id="couleur" name="couleur">
+      </div>
+      <p class="form-error" id="couleur-error">Merci de choisir une couleur.</p>
+    </div>
+
+    <div>
+      <label for="quantite">Quantité</label>
+      <input type="number" id="quantite" name="quantite" min="1" step="1" value="1" required>
+    </div>
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="fichier-present" name="fichier-present">
+      <label for="fichier-present">Fichier présent (en .3mf)</label>
+    </div>
+
+    <div id="description-bloc">
+      <label>Description de l'objet à imprimer</label>
+      <p class="phrase-description">
+        Je souhaiterais un(e)
+        <input type="text" id="description-objet" name="description_objet" class="inline-input inline-input-texte" placeholder="objet">
+        en imprimante 3D, de longueur
+        <input type="number" id="description-longueur" name="description_longueur" class="inline-input inline-input-nombre" min="0" step="0.1" placeholder="0">
+        cm, hauteur
+        <input type="number" id="description-hauteur" name="description_hauteur" class="inline-input inline-input-nombre" min="0" step="0.1" placeholder="0">
+        cm et de largeur
+        <input type="number" id="description-largeur" name="description_largeur" class="inline-input inline-input-nombre" min="0" step="0.1" placeholder="0">
+        cm.
+      </p>
+      <p class="form-error" id="description-error">Merci de compléter la description (objet, longueur, hauteur et largeur).</p>
+    </div>
+
+    <div id="dimensions-bloc" hidden>
+      <label>Dimensions de l'objet à imprimer</label>
+      <p class="phrase-description">
+        Longueur :
+        <input type="number" id="dimensions-longueur" name="dimensions_longueur" class="inline-input inline-input-nombre" min="0" step="0.1" placeholder="0">
+        cm, hauteur :
+        <input type="number" id="dimensions-hauteur" name="dimensions_hauteur" class="inline-input inline-input-nombre" min="0" step="0.1" placeholder="0">
+        cm et largeur :
+        <input type="number" id="dimensions-largeur" name="dimensions_largeur" class="inline-input inline-input-nombre" min="0" step="0.1" placeholder="0">
+        cm.
+      </p>
+      <p class="form-error" id="dimensions-error">Merci de compléter les dimensions (longueur, hauteur et largeur).</p>
+    </div>
+
+    <div id="fichier-upload" class="hidden">
+      <label for="fichier-3mf">Fichier 3MF</label>
+      <input type="file" id="fichier-3mf" name="fichier-3mf" accept=".3mf">
+      <p class="form-error" id="fichier-error">Merci de sélectionner un fichier .3mf, ou décoche la case ci-dessus.</p>
+      <p class="price-note hidden" id="fichier-taille-note"></p>
+    </div>
+
+    <div class="price-box" id="price-box">
+      <button type="button" class="price-toggle" id="price-toggle" aria-expanded="false">
+        <span>Prix total : <strong id="price-total">0,00 €</strong></span>
+        <svg class="caret" viewBox="0 0 10 10" fill="none">
+          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+
+      <div class="price-details hidden" id="price-details">
+        <p id="price-line-recherche" class="hidden">Frais : 0,40 €</p>
+        <p id="price-line-recherche-fichier" class="hidden">Frais : 0,20 €</p>
+        <p id="price-line-matiere" class="hidden"></p>
+        <p class="price-note">Le prix final sera confirmé après étude du fichier ou de la description.</p>
+      </div>
+    </div>
+
+    <p id="connexion-commande-error" class="form-error" style="display: none;"></p>
+
+    <button type="submit" class="btn btn-primary">Ajouter au panier</button>
+  </form>
+</main>
+
+<div class="confirmation-overlay" id="confirmation-overlay" aria-hidden="true">
+  <div class="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="confirmation-title">
+    <h2 id="confirmation-title">Confirmer la commande</h2>
+    <p class="confirmation-intro">Avant d'ajouter la commande au panier, merci de confirmer les deux éléments suivants.</p>
+
+    <div class="confirmation-checkboxes">
+      <label class="confirmation-checkbox">
+        <input type="checkbox" id="confirmation-argent">
+        <span>Je certifie avoir l'argent nécessaire pour régler cette commande.</span>
+      </label>
+
+      <label class="confirmation-checkbox">
+        <input type="checkbox" id="confirmation-conditions">
+        <span>J'accepte les <a href="condition.html" target="_blank" rel="noopener noreferrer">conditions d'achat et d'utilisation</a>.</span>
+      </label>
+    </div>
+
+    <div class="confirmation-actions">
+      <button type="button" class="btn btn-secondary" id="confirmation-annuler">Annuler</button>
+      <button type="button" class="btn btn-primary confirmation-confirm" id="confirmation-confirmer" disabled>Confirmer l'ajout au panier</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="main.js"></script>
+
+<script type="module">
+  import { auth, authReady, db } from './firebase-config.js';
+  import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js';
+  import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js';
+  import { ajouterAuPanier } from './main.js';
+
+  let utilisateurConnecte = null;
+  await authReady;
+
+  onAuthStateChanged(auth, function(utilisateur) {
+    utilisateurConnecte = utilisateur;
+  });
+
+  const checkboxFichier = document.getElementById('fichier-present');
+  const blocUpload = document.getElementById('fichier-upload');
+  const fichierInput = document.getElementById('fichier-3mf');
+  const fichierError = document.getElementById('fichier-error');
+  const fichierTailleNote = document.getElementById('fichier-taille-note');
+
+  const blocDescription = document.getElementById('description-bloc');
+  const descriptionObjet = document.getElementById('description-objet');
+  const descriptionLongueur = document.getElementById('description-longueur');
+  const descriptionHauteur = document.getElementById('description-hauteur');
+  const descriptionLargeur = document.getElementById('description-largeur');
+  const descriptionError = document.getElementById('description-error');
+
+  const quantiteInput = document.getElementById('quantite');
+  const uploadDescription = document.getElementById('dimensions-bloc');
+  const uploadLongueur = document.getElementById('dimensions-longueur');
+  const uploadHauteur = document.getElementById('dimensions-hauteur');
+  const uploadLargeur = document.getElementById('dimensions-largeur');
+  const uploadError = document.getElementById('dimensions-error');
+
+  function verifierDescription() {
+    if (
+      descriptionObjet.value.trim() !== '' &&
+      descriptionLongueur.value !== '' &&
+      descriptionHauteur.value !== '' &&
+      descriptionLargeur.value !== ''
+    ) {
+      descriptionError.style.display = 'none';
+    }
+  }
+
+  [descriptionObjet, descriptionLongueur, descriptionHauteur, descriptionLargeur].forEach(function(champ) {
+    champ.addEventListener('input', verifierDescription);
+  });
+
+  function verifierDimensions() {
+    if (uploadLongueur.value !== '' && uploadHauteur.value !== '' && uploadLargeur.value !== '') {
+      uploadError.style.display = 'none';
+    }
+  }
+
+  [uploadLongueur, uploadHauteur, uploadLargeur].forEach(function(champ) {
+    champ.addEventListener('input', verifierDimensions);
+  });
+
+  checkboxFichier.addEventListener('change', function() {
+    const coche = checkboxFichier.checked;
+    blocUpload.style.display = coche ? 'block' : 'none';
+    blocDescription.style.display = coche ? 'none' : 'block';
+    uploadDescription.style.display = coche ? 'block' : 'none';
+    fichierError.style.display = 'none';
+    descriptionError.style.display = 'none';
+    uploadError.style.display = 'none';
+    mettreAJourPrix();
+  });
+
+  // =========================================================
+  // LECTURE DU FICHIER .3MF ET DÉTERMINATION DU POIDS EN GRAMMES
+  // =========================================================
+
+  const priceToggle = document.getElementById('price-toggle');
+  const priceDetails = document.getElementById('price-details');
+  const priceTotal = document.getElementById('price-total');
+  const ligneRecherche = document.getElementById('price-line-recherche');
+  const ligneRechercheMatiere = document.getElementById('price-line-recherche-fichier');
+  const ligneMatiere = document.getElementById('price-line-matiere');
+
+  const DENSITE_MATERIAU = 1.24;
+  const FACTEUR_REMPLISSAGE_PAR_DEFAUT = 0.35;
+  const DENSITES_MATERIAU = {
+    PLA: 1.24, PETG: 1.27, ABS: 1.04, ASA: 1.05, TPU: 1.21,
+    PA: 1.14, NYLON: 1.14, PC: 1.20, PVA: 1.23, HIPS: 1.03
+  };
+
+  function densitePourMateriau(nomMateriau) {
+    if (!nomMateriau) return DENSITE_MATERIAU;
+    return DENSITES_MATERIAU[nomMateriau.toUpperCase().trim()] || DENSITE_MATERIAU;
+  }
+
+  let poidsEstime = 0;
+  let materiauDetecte = null;
+  let prixCouleurCentimes = null;
+  let prixMatiereCalcule = 0;
+
+  function volumeTetraedre(p1, p2, p3) {
+    return (
+      p1[0] * (p2[1] * p3[2] - p3[1] * p2[2]) -
+      p1[1] * (p2[0] * p3[2] - p3[0] * p2[2]) +
+      p1[2] * (p2[0] * p3[1] - p3[0] * p2[1])
+    ) / 6.0;
+  }
+
+  function trouverFinRepertoireCentral(vue, tailleFichier) {
+    const tailleRecherche = Math.min(tailleFichier, 65557);
+    for (let i = tailleFichier - 22; i >= tailleFichier - tailleRecherche; i--) {
+      if (vue.getUint32(i, true) === 0x06054b50) return i;
+    }
+    throw new Error("Fin de répertoire ZIP introuvable.");
+  }
+
+  function listerFichiersZip(vue, buffer, offsetRepertoire, tailleRepertoire) {
+    const entrees = [];
+    let position = offsetRepertoire;
+    const fin = offsetRepertoire + tailleRepertoire;
+
+    while (position < fin) {
+      if (vue.getUint32(position, true) !== 0x02014b50) break;
+      const methode = vue.getUint16(position + 10, true);
+      const tailleCompressee = vue.getUint32(position + 20, true);
+      const longueurNom = vue.getUint16(position + 28, true);
+      const longueurExtra = vue.getUint16(position + 30, true);
+      const longueurCommentaire = vue.getUint16(position + 32, true);
+      const offsetLocal = vue.getUint32(position + 42, true);
+      const nom = new TextDecoder().decode(new Uint8Array(buffer, position + 46, longueurNom));
+
+      entrees.push({ nom, methode, tailleCompressee, offsetLocal });
+      position += 46 + longueurNom + longueurExtra + longueurCommentaire;
+    }
+    return entrees;
+  }
+
+  function extraireDonneesCompressees(vue, buffer, entree) {
+    const position = entree.offsetLocal;
+    const longueurNomLocal = vue.getUint16(position + 26, true);
+    const longueurExtraLocal = vue.getUint16(position + 28, true);
+    const debutDonnees = position + 30 + longueurNomLocal + longueurExtraLocal;
+    return buffer.slice(debutDonnees, debutDonnees + entree.tailleCompressee);
+  }
+
+  async function decompresser(donneesCompressees, methode) {
+    if (methode === 0) return donneesCompressees;
+    const flux = new Blob([donneesCompressees]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return await new Response(flux).arrayBuffer();
+  }
+
+  function volumeDepuisXML3MF(texteXML) {
+    const doc = new DOMParser().parseFromString(texteXML, 'application/xml');
+    const maillages = doc.getElementsByTagName('mesh');
+    let volumeTotal = 0;
+
+    for (let m = 0; m < maillages.length; m++) {
+      const sommetsEls = maillages[m].getElementsByTagName('vertex');
+      const sommets = [];
+      for (let s = 0; s < sommetsEls.length; s++) {
+        sommets.push([
+          parseFloat(sommetsEls[s].getAttribute('x')),
+          parseFloat(sommetsEls[s].getAttribute('y')),
+          parseFloat(sommetsEls[s].getAttribute('z'))
+        ]);
+      }
+      const trianglesEls = maillages[m].getElementsByTagName('triangle');
+      for (let t = 0; t < trianglesEls.length; t++) {
+        const i1 = parseInt(trianglesEls[t].getAttribute('v1'), 10);
+        const i2 = parseInt(trianglesEls[t].getAttribute('v2'), 10);
+        const i3 = parseInt(trianglesEls[t].getAttribute('v3'), 10);
+        volumeTotal += volumeTetraedre(sommets[i1], sommets[i2], sommets[i3]);
+      }
+    }
+    return Math.abs(volumeTotal);
+  }
+
+  function extraireSliceInfo(texteXML) {
+    const doc = new DOMParser().parseFromString(texteXML, 'application/xml');
+    const tousLesElements = doc.getElementsByTagName('*');
+    let poidsTotal = 0;
+    let materiau = null;
+
+    for (let i = 0; i < tousLesElements.length; i++) {
+      const el = tousLesElements[i];
+      const poidsAttr = el.getAttribute('used_g') || el.getAttribute('weight') || el.getAttribute('used_grams');
+      if (poidsAttr) {
+        poidsTotal += parseFloat(poidsAttr) || 0;
+        if (!materiau) materiau = el.getAttribute('type') || el.getAttribute('filament_type');
+      }
+    }
+    return { poids: poidsTotal, materiau };
+  }
+
+  function extraireReglagesProjet(texteJSON) {
+    const data = JSON.parse(texteJSON);
+    const type = Array.isArray(data.filament_type) ? data.filament_type[0] : data.filament_type;
+    let remplissage = null;
+    if (data.fill_density !== undefined) {
+      const valeurBrute = Array.isArray(data.fill_density) ? data.fill_density[0] : data.fill_density;
+      const nombre = parseFloat(valeurBrute);
+      if (!isNaN(nombre)) remplissage = nombre / 100;
+    }
+    let densite = null;
+    if (data.filament_density !== undefined) {
+      const valeurBrute = Array.isArray(data.filament_density) ? data.filament_density[0] : data.filament_density;
+      const nombre = parseFloat(valeurBrute);
+      if (!isNaN(nombre)) densite = nombre;
+    }
+    return { type, remplissage, densite };
+  }
+
+  async function poidsDepuis3MF(buffer) {
+    const vue = new DataView(buffer);
+    const positionFin = trouverFinRepertoireCentral(vue, buffer.byteLength);
+    const tailleRepertoire = vue.getUint32(positionFin + 12, true);
+    const offsetRepertoire = vue.getUint32(positionFin + 16, true);
+    const fichiers = listerFichiersZip(vue, buffer, offsetRepertoire, tailleRepertoire);
+
+    async function lire(entree) {
+      const donneesCompressees = extraireDonneesCompressees(vue, buffer, entree);
+      const donnees = await decompresser(donneesCompressees, entree.methode);
+      return new TextDecoder().decode(new Uint8Array(donnees));
+    }
+
+    const entreeSliceInfo = fichiers.find(f => f.nom.toLowerCase().endsWith('slice_info.config'));
+    const entreeSettings = fichiers.find(f => f.nom.toLowerCase().endsWith('project_settings.config'));
+    const entreeModele = fichiers.find(f => f.nom.toLowerCase().endsWith('.model'));
+
+    if (entreeSliceInfo) {
+      try {
+        const resultat = extraireSliceInfo(await lire(entreeSliceInfo));
+        if (resultat.poids > 0) return { poids: resultat.poids, materiau: resultat.materiau || 'non précisé' };
+      } catch (erreur) {}
+    }
+
+    let materiau = null, remplissage = null, densite = null;
+    if (entreeSettings) {
+      try {
+        const reglages = extraireReglagesProjet(await lire(entreeSettings));
+        materiau = reglages.type;
+        remplissage = reglages.remplissage;
+        densite = reglages.densite;
+      } catch (erreur) {}
+    }
+
+    if (!entreeModele) throw new Error("Aucun modèle 3D trouvé.");
+
+    const volumeMM3 = volumeDepuisXML3MF(await lire(entreeModele));
+    const volumeCM3 = volumeMM3 / 1000;
+    const densiteFinale = densite || densitePourMateriau(materiau);
+    const facteurFinal = remplissage !== null ? remplissage + (1 - remplissage) * 0.15 : FACTEUR_REMPLISSAGE_PAR_DEFAUT;
+
+    return { poids: volumeCM3 * densiteFinale * facteurFinal, materiau: materiau || 'PLA (supposé)' };
+  }
+
+  fichierInput.addEventListener('change', function() {
+    if (fichierInput.files.length === 0) {
+      poidsEstime = 0;
+      materiauDetecte = null;
+      fichierTailleNote.classList.add('hidden');
+      mettreAJourPrix();
+      return;
+    }
+
+    fichierError.style.display = 'none';
+    const fichier = fichierInput.files[0];
+
+    if (fichier.size > 900000) {
+      alert("Le fichier est un peu trop volumineux. La limite pour l'enregistrement direct est de 900 Ko.");
+      fichierInput.value = "";
+      poidsEstime = 0;
+      mettreAJourPrix();
+      return;
+    }
+
+    fichierTailleNote.classList.add('hidden');
+
+    const lecteur = new FileReader();
+    lecteur.onload = function(e) {
+      poidsDepuis3MF(e.target.result)
+        .then(function(resultat) {
+          poidsEstime = resultat.poids;
+          materiauDetecte = resultat.materiau;
+          mettreAJourPrix();
+        })
+        .catch(function() {
+          poidsEstime = 0;
+          materiauDetecte = null;
+          mettreAJourPrix();
+        });
+    };
+    lecteur.readAsArrayBuffer(fichier);
+  });
+
+  function mettreAJourPrix() {
+    let total = 0;
+    const avecFichier = checkboxFichier.checked;
+    const fraisFixes = avecFichier ? 0.20 : 0.40;
+
+    total += fraisFixes;
+    prixMatiereCalcule = 0;
+
+    if (!avecFichier) {
+      ligneRecherche.classList.remove('hidden');
+      ligneRechercheMatiere.classList.add('hidden');
+      ligneMatiere.classList.add('hidden');
+    } else {
+      ligneRecherche.classList.add('hidden');
+      ligneRechercheMatiere.classList.remove('hidden');
+
+      if (poidsEstime > 0 && prixCouleurCentimes !== null) {
+        const quantite = Math.max(1, parseInt(quantiteInput.value, 10) || 1);
+        
+        prixMatiereCalcule = (poidsEstime * prixCouleurCentimes / 100) * quantite;
+        total += prixMatiereCalcule;
+
+        ligneMatiere.textContent = `Prix de la matière : ${prixMatiereCalcule.toFixed(2).replace('.', ',')} € (${poidsEstime.toFixed(1)}g × ${prixCouleurCentimes} c/g × ${quantite})`;
+        ligneMatiere.classList.remove('hidden');
+      } else {
+        ligneMatiere.classList.add('hidden');
+      }
+    }
+
+    priceTotal.textContent = total.toFixed(2).replace('.', ',') + ' €';
+  }
+
+  priceToggle.addEventListener('click', function() {
+    const estCache = priceDetails.classList.toggle('hidden');
+    priceToggle.setAttribute('aria-expanded', String(!estCache));
+  });
+
+  mettreAJourPrix();
+  quantiteInput.addEventListener('input', mettreAJourPrix);
+
+  // =========================================================
+  // CHARGEMENT DES COULEURS DEPUIS FIRESTORE
+  // =========================================================
+
+  const toggleBtn = document.getElementById('couleur-toggle');
+  const optionsList = document.getElementById('couleur-options');
+  const couleurAffichee = document.getElementById('couleur-affichee');
+  const couleurInput = document.getElementById('couleur');
+  const couleurError = document.getElementById('couleur-error');
+
+  function fermerListe() {
+    optionsList.classList.remove('open');
+    toggleBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  toggleBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    optionsList.classList.toggle('open');
+  });
+
+  async function chargerCouleursFirestore() {
+    try {
+      const snapshot = await getDocs(collection(db, 'couleurs'));
+      optionsList.innerHTML = '';
+      if (snapshot.empty) {
+        couleurAffichee.textContent = 'Aucune couleur disponible';
+        return;
+      }
+      couleurAffichee.textContent = 'Choisir une couleur';
+
+      snapshot.forEach(function(docSnap) {
+        const data = docSnap.data();
+        const nom = data.nom || docSnap.id;
+        const prix = Number(data.prixCentimes ?? 0);
+        const texteAffichable = nom + ' (' + prix + ' centimes le gramme)';
+
+        const li = document.createElement('li');
+        li.textContent = texteAffichable;
+
+        li.addEventListener('click', function() {
+          couleurAffichee.textContent = texteAffichable;
+          couleurInput.value = texteAffichable;
+          couleurError.style.display = 'none';
+          prixCouleurCentimes = prix;
+          fermerListe();
+          mettreAJourPrix();
+        });
+
+        optionsList.appendChild(li);
+      });
+    } catch (erreur) {
+      couleurAffichee.textContent = 'Erreur de chargement';
+    }
+  }
+
+  chargerCouleursFirestore();
+
+  document.addEventListener('click', function(e) {
+    if (!optionsList.contains(e.target) && e.target !== toggleBtn) fermerListe();
+  });
+
+  // =========================================================
+  // OVERLAY DE CONFIRMATION ET VALIDATION STRICTE
+  // =========================================================
+
+  const confirmationOverlay = document.getElementById('confirmation-overlay');
+  const confirmationArgent = document.getElementById('confirmation-argent');
+  const confirmationConditions = document.getElementById('confirmation-conditions');
+  const confirmationAnnuler = document.getElementById('confirmation-annuler');
+  const confirmationConfirmer = document.getElementById('confirmation-confirmer');
+
+  function ouvrirConfirmation() {
+    confirmationOverlay.classList.add('open');
+    confirmationOverlay.setAttribute('aria-hidden', 'false');
+  }
+
+  function fermerConfirmation() {
+    confirmationOverlay.classList.remove('open');
+    confirmationOverlay.setAttribute('aria-hidden', 'true');
+  }
+
+  function mettreAJourConfirmation() {
+    confirmationConfirmer.disabled = !(confirmationArgent.checked && confirmationConditions.checked);
+  }
+
+  confirmationArgent.addEventListener('change', mettreAJourConfirmation);
+  confirmationConditions.addEventListener('change', mettreAJourConfirmation);
+  confirmationAnnuler.addEventListener('click', fermerConfirmation);
+
+  const orderForm = document.getElementById('order-form');
+
+  orderForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    couleurError.style.display = 'none';
+    fichierError.style.display = 'none';
+    descriptionError.style.display = 'none';
+    uploadError.style.display = 'none';
+
+    if (!utilisateurConnecte) {
+      alert("Tu dois être connecté à ton compte pour passer une commande.");
+      window.location.href = 'connexion.html?retour=commande';
+      return;
+    }
+
+    let valide = true;
+
+    if (!couleurInput.value) {
+      couleurError.style.display = 'block';
+      valide = false;
+    }
+
+    if (checkboxFichier.checked) {
+      if (!fichierInput.files || fichierInput.files.length === 0) {
+        fichierError.style.display = 'block';
+        valide = false;
+      }
+      if (uploadLongueur.value === '' || uploadHauteur.value === '' || uploadLargeur.value === '') {
+        uploadError.style.display = 'block';
+        valide = false;
+      }
+    } else {
+      if (
+        descriptionObjet.value.trim() === '' ||
+        descriptionLongueur.value === '' ||
+        descriptionHauteur.value === '' ||
+        descriptionLargeur.value === ''
+      ) {
+        descriptionError.style.display = 'block';
+        valide = false;
+      }
+    }
+
+    if (valide) {
+      ouvrirConfirmation();
+    }
+  });
+
+  function convertFileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = error => reject(error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // =========================================================
+  // CONFIRMATION FINALE : ENREGISTREMENT DIRECT DANS LE PANIER
+  // =========================================================
+
+  confirmationConfirmer.addEventListener('click', async function() {
+    if (!confirmationArgent.checked || !confirmationConditions.checked) return;
+
+    confirmationConfirmer.disabled = true;
+    confirmationConfirmer.textContent = 'Préparation du fichier...';
+
+    const avecFichier = checkboxFichier.checked;
+
+    let texteNom = avecFichier && fichierInput.files.length > 0
+      ? fichierInput.files[0].name.replace(/\.[^/.]+$/, "")
+      : descriptionObjet.value.trim();
+
+    const mots = texteNom.split(/\s+/).filter(Boolean);
+    const nomArticle = mots.slice(0, 3).join(' ') || 'Commande perso';
+
+    const fraisFixes = avecFichier ? 0.20 : 0.40;
+    const totalEuro = prixMatiereCalcule + fraisFixes;
+
+    const prixFormatHTML = `<strong>${totalEuro.toFixed(2).replace('.', ',')} €</strong> <span class="price-detail">(${prixMatiereCalcule.toFixed(2).replace('.', ',')} € + taxes (${fraisFixes.toFixed(2).replace('.', ',')}€))</span>`;
+
+    let fichierNom = '';
+    let fichierBase64 = '';
+
+    if (avecFichier && fichierInput.files.length > 0) {
+      const fichier = fichierInput.files[0];
+      fichierNom = fichier.name;
+
+      try {
+        fichierBase64 = await convertFileToBase64(fichier);
+      } catch (err) {
+        console.error("Erreur lors du traitement du fichier :", err);
+        alert("Impossible de lire le fichier 3D.");
+        confirmationConfirmer.disabled = false;
+        confirmationConfirmer.textContent = "Confirmer l'ajout au panier";
+        return;
+      }
+    }
+
+    const articlePanier = {
+      id: 'cmd-' + Date.now(),
+      nom: nomArticle,
+      prix: prixFormatHTML,
+      image: 'commande.png',
+      imageAlt: nomArticle,
+      lien: 'commande.html',
+      quantite: Math.max(1, parseInt(quantiteInput.value, 10) || 1),
+      fichierNom: fichierNom,
+      fichierData: fichierBase64
+    };
+
+    try {
+      await ajouterAuPanier(utilisateurConnecte.uid, articlePanier);
+      fermerConfirmation();
+      window.location.href = 'panier.html';
+    } catch (erreur) {
+      console.error("Erreur lors de l'ajout au panier :", erreur);
+      alert("Impossible d'ajouter la commande au panier.");
+      confirmationConfirmer.disabled = false;
+      confirmationConfirmer.textContent = "Confirmer l'ajout au panier";
+    }
+  });
+</script>
+
 </body>
 </html>

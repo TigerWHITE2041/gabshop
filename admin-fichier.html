@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Administration des commandes — Gabshop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .admin-commande-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .admin-commande-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 8px;
+      font-size: 0.9rem;
+      color: var(--ink-soft);
+    }
+    .admin-commande-articles {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .article-ligne-admin {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.02);
+      padding: 10px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div id="site-header"></div>
+</header>
+
+<main>
+  <p id="admin-chargement" class="account-intro">Vérification des droits...</p>
+
+  <div id="admin-contenu" class="hidden">
+    <p class="account-eyebrow">GABSHOP ADMIN</p>
+    <h1>Commandes clients & Fichiers 3D</h1>
+    <p class="account-intro">Retrouve ici la liste des commandes enregistrées et télécharge les fichiers .3mf associés.</p>
+
+    <section class="admin-section">
+      <div id="liste-commandes-admin">
+        <p class="account-intro">Chargement des commandes...</p>
+      </div>
+    </section>
+
+    <div style="margin-top: 24px;">
+      <a href="admin.html" class="btn btn-secondary">← Retour à l'administration</a>
+    </div>
+  </div>
+</main>
+
+<script type="module" src="main.js"></script>
+<script type="module">
+  import { db } from './firebase-config.js';
+  import { collection, query, orderBy, onSnapshot, doc, deleteDoc } from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js';
+  import { protegerPage } from './main.js';
+
+  // Protection de la page réservée aux administrateurs
+  protegerPage(['admin']);
+
+  const blocChargement = document.getElementById('admin-chargement');
+  const blocContenu = document.getElementById('admin-contenu');
+  const conteneurListe = document.getElementById('liste-commandes-admin');
+
+  function echapperHTML(texte) {
+    const element = document.createElement('div');
+    element.textContent = texte || '';
+    return element.innerHTML;
+  }
+
+  // Affichage du contenu une fois connecté en admin
+  setTimeout(() => {
+    blocChargement.classList.add('hidden');
+    blocContenu.classList.remove('hidden');
+    chargerCommandesFirestore();
+  }, 500);
+
+  function chargerCommandesFirestore() {
+    const q = query(collection(db, 'commandes_attente'), orderBy('date_commande', 'desc'));
+
+    onSnapshot(q, (snapshot) => {
+      if (snapshot.empty) {
+        conteneurListe.innerHTML = '<p class="account-intro">Aucune commande en attente pour le moment.</p>';
+        return;
+      }
+
+      conteneurListe.innerHTML = '';
+
+      snapshot.forEach((documentSnap) => {
+        const data = documentSnap.data();
+        const idCommande = documentSnap.id;
+        const dateFormatee = data.date_commande ? new Date(data.date_commande).toLocaleString('fr-FR') : 'Date inconnue';
+
+        const carte = document.createElement('div');
+        carte.className = 'admin-commande-card';
+
+        let articlesHTML = '';
+        if (data.articles && Array.isArray(data.articles)) {
+          articlesHTML = data.articles.map(article => {
+            let boutonTelechargement = '';
+            if (article.fichierData && article.fichierNom) {
+              boutonTelechargement = `
+                <a href="${article.fichierData}" download="${echapperHTML(article.fichierNom)}" class="btn btn-primary" style="font-size: 0.85rem; padding: 6px 12px;">
+                  📥 Télécharger ${echapperHTML(article.fichierNom)}
+                </a>
+              `;
+            } else {
+              boutonTelechargement = `<span style="font-size: 0.85rem; color: var(--ink-soft);">Pas de fichier 3D joint (Commande sur mesure)</span>`;
+            }
+
+            return `
+              <div class="article-ligne-admin">
+                <div>
+                  <strong>${echapperHTML(article.nom)}</strong> (Quantité : ${article.quantite || 1})
+                  <div style="font-size: 0.9rem; margin-top: 4px;">Prix : ${article.prix}</div>
+                </div>
+                <div>${boutonTelechargement}</div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        carte.innerHTML = `
+          <div class="admin-commande-header">
+            <span>Client : <strong>${echapperHTML(data.email_compte)}</strong></span>
+            <span>Commandé le : ${dateFormatee}</span>
+          </div>
+          <div class="admin-commande-articles">
+            ${articlesHTML}
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+            <strong>Total de la commande : ${echapperHTML(data.prix_total)}</strong>
+            <button type="button" class="btn btn-secondary" data-supprimer-cmd="${idCommande}" style="background: #e53935; color: white; border: none;">
+              Supprimer la commande
+            </button>
+          </div>
+        `;
+
+        // Suppression de la commande une fois traitée/imprimée
+        carte.querySelector('[data-supprimer-cmd]').addEventListener('click', async () => {
+          if (confirm('Voulez-vous archiver/supprimer cette commande de la liste ?')) {
+            try {
+              await deleteDoc(doc(db, 'commandes_attente', idCommande));
+            } catch (err) {
+              console.error("Erreur lors de la suppression :", err);
+              alert("Impossible de supprimer cette commande.");
+            }
+          }
+        });
+
+        conteneurListe.appendChild(carte);
+      });
+    }, (erreur) => {
+      console.error("Erreur chargement commandes :", erreur);
+      conteneurListe.innerHTML = '<p class="account-intro">Erreur lors de la récupération des commandes.</p>';
+    });
+  }
+</script>
+
+</body>
+</html>

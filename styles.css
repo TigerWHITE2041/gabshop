@@ -1387,3 +1387,50 @@ a[href="panier.html"] {
 .stars {
   color: #ffca28;
 }
+
+/* ---------- Filtre de prix dans le Header ---------- */
+.header-price-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 10px;
+  font-size: 0.9rem;
+}
+
+.header-price-filter .filter-label {
+  font-weight: 500;
+  color: var(--color-subdued, #666);
+  white-space: nowrap; /* Empêche la rupture de ligne entre "Prix" et ":" */
+}
+
+.header-price-filter input[type="number"] {
+  width: 65px;
+  padding: 4px 6px;
+  border: 1px solid var(--line, #ccc);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  background: transparent;
+  color: inherit;
+  text-align: center;
+}
+
+.header-price-filter input[type="number"]::-webkit-inner-spin-button,
+.header-price-filter input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.btn-filter-apply {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  border: none;
+  background-color: var(--color-primary, #000);
+  color: #fff;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn-filter-apply:hover {
+  opacity: 0.8;
+}

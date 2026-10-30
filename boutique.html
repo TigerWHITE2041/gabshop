@@ -29,6 +29,7 @@
     ecouterProduits, 
     formaterPrixProduit, 
     filtrerProduitsParCollection,
+    filtrerProduitsParPrix,
     obtenirRoleUtilisateur
   } from './main.js';
 
@@ -69,19 +70,22 @@
   function afficherProduits(produits) {
     const parametres = new URLSearchParams(window.location.search);
     const collectionFiltree = parametres.get('collection');
+    const minPrix = parametres.get('minPrix');
+    const maxPrix = parametres.get('maxPrix');
 
     blocChargement.classList.add('hidden');
 
-    const filtres = filtrerProduitsParCollection(produits, collectionFiltree);
+    let resultat = filtrerProduitsParCollection(produits, collectionFiltree);
+    resultat = filtrerProduitsParPrix(resultat, minPrix, maxPrix);
 
-    if (filtres.length === 0) {
+    if (resultat.length === 0) {
       blocVide.classList.remove('hidden');
       grille.innerHTML = '';
       return;
     }
 
     blocVide.classList.add('hidden');
-    grille.innerHTML = filtres.map(creerCarteProduit).join('');
+    grille.innerHTML = resultat.map(creerCarteProduit).join('');
   }
 
   // Écoute de l'état d'authentification pour adapter les prix selon le rôle VIP/VIP+

@@ -24,9 +24,11 @@ import {
   getDownloadURL
 } from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-storage.js';
 
+import { initialiserLogoLiquide } from './logo-liquid.js';
+
 
 // =========================================================
-// HEADER
+// HEADER (AVEC FILTRE DE PRIX ENTRE CONTACT ET COMPTE)
 // =========================================================
 
 document.getElementById('site-header').innerHTML = `
@@ -34,7 +36,9 @@ document.getElementById('site-header').innerHTML = `
   <div class="header-inner">
 
     <a class="brand" href="index.html">
-      3D commande
+      <span class="logo-liquid" id="logo-liquid">
+        <img src="LogoImage.png" alt="3D Commande" style="height: 80px; width: auto; vertical-align: middle;">
+      </span>
     </a>
 
     <nav class="main-nav" aria-label="Navigation principale">
@@ -109,6 +113,15 @@ document.getElementById('site-header').innerHTML = `
       </ul>
     </nav>
 
+    <!-- Filtre de Prix dans le Header -->
+    <div class="header-price-filter">
+      <span class="filter-label">Prix :</span>
+      <input type="number" id="prix-min" placeholder="Min €" min="0" step="1" />
+      <span>-</span>
+      <input type="number" id="prix-max" placeholder="Max €" min="0" step="1" />
+      <button type="button" id="btn-filtrer-prix" class="btn-filter-apply">OK</button>
+    </div>
+
     <div class="header-actions">
 
       <div class="account-header" id="account-header">
@@ -126,6 +139,42 @@ document.getElementById('site-header').innerHTML = `
   </div>
 </header>
 `;
+
+initialiserLogoLiquide();
+
+
+// =========================================================
+// INITIALISATION DU FILTRE DE PRIX DU HEADER
+// =========================================================
+
+(function initialiserFiltrePrixHeader() {
+  const btnFiltrer = document.getElementById('btn-filtrer-prix');
+  const inputMin = document.getElementById('prix-min');
+  const inputMax = document.getElementById('prix-max');
+
+  if (!btnFiltrer) return;
+
+  // Pré-remplir les champs si la page contient déjà des paramètres de filtre dans l'URL
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('minPrix')) inputMin.value = params.get('minPrix');
+  if (params.has('maxPrix')) inputMax.value = params.get('maxPrix');
+
+  btnFiltrer.addEventListener('click', function() {
+    const min = inputMin.value.trim();
+    const max = inputMax.value.trim();
+
+    const searchParams = new URLSearchParams(window.location.search);
+
+    if (min) searchParams.set('minPrix', min);
+    else searchParams.delete('minPrix');
+
+    if (max) searchParams.set('maxPrix', max);
+    else searchParams.delete('maxPrix');
+
+    // Redirection vers boutique.html avec les filtres
+    window.location.href = `boutique.html?${searchParams.toString()}`;
+  });
+})();
 
 
 // =========================================================
@@ -246,11 +295,10 @@ export function formaterPrixProduit(produit, role = 'membre') {
   const taxes = Number(produit.taxes) || 0;
   const baseOriginale = base;
 
-  // Réduction appliquée sur le prix de base uniquement
   if (role === 'vip_gratuit') {
-    base = base * 0.80; // -20%
+    base = base * 0.80;
   } else if (role === 'vip_payant') {
-    base = base * 0.50; // -50%
+    base = base * 0.50;
   }
 
   const total = base + taxes;
@@ -259,7 +307,6 @@ export function formaterPrixProduit(produit, role = 'membre') {
     return nombre.toFixed(2).replace('.', ',') + ' €';
   }
 
-  // Affichage si l'utilisateur bénéficie d'une réduction VIP / VIP+
   if (role === 'vip_gratuit' || role === 'vip_payant') {
     const tauxReduction = role === 'vip_gratuit' ? '-20%' : '-50%';
     const classeBadge = role === 'vip_payant' ? 'role-vip-payant' : 'role-vip-gratuit';
@@ -289,6 +336,20 @@ export function filtrerProduitsParCollection(produits, collectionId) {
       return produit.collections.includes(collectionId);
     }
     return produit.collection === collectionId;
+  });
+}
+
+export function filtrerProduitsParPrix(produits, minPrix, maxPrix) {
+  const min = parseFloat(minPrix);
+  const max = parseFloat(maxPrix);
+
+  return produits.filter(function(produit) {
+    const prixTotal = (Number(produit.prixBase) || 0) + (Number(produit.taxes) || 0);
+
+    if (!isNaN(min) && prixTotal < min) return false;
+    if (!isNaN(max) && prixTotal > max) return false;
+
+    return true;
   });
 }
 
@@ -613,14 +674,11 @@ function genererPositionDepuisUID(uid) {
 async function initialiserEasterEgg(utilisateur) {
   if (!utilisateur) return;
 
-  // Si l'utilisateur a déjà trouvé l'easter egg, on n'affiche pas la zone
   const userDoc = await obtenirUtilisateurFirestore(utilisateur.uid);
   if (userDoc && userDoc.easterEggTrouve === true) return;
 
-  // Calcul déterministe de la position
   const pos = genererPositionDepuisUID(utilisateur.uid);
 
-  // Création du bouton invisible
   const egg = document.createElement('button');
   egg.type = 'button';
   egg.className = 'easter-egg-zone';
@@ -631,7 +689,6 @@ async function initialiserEasterEgg(utilisateur) {
   egg.addEventListener('click', async function() {
     console.log("Easter egg trouvé !");
 
-    // 1. Définition de l'objet produit "Mini dragon" gratuit
     const produitEasterEgg = {
       id: 'mini-dragon-easter-egg',
       nom: 'Mini dragon',
@@ -647,15 +704,12 @@ async function initialiserEasterEgg(utilisateur) {
     };
 
     try {
-      // 2. Ajout automatique de l'article dans le panier Firestore
       await ajouterAuPanier(utilisateur.uid, produitEasterEgg);
 
-      // 3. Marquer l'easter egg comme trouvé pour cet utilisateur
       await setDoc(doc(db, 'utilisateurs', utilisateur.uid), {
         easterEggTrouve: true
       }, { merge: true });
 
-      // 4. Retrait de l'élément du DOM
       egg.remove();
     } catch (e) {
       console.error("Erreur lors du traitement de l'easter egg :", e);
@@ -683,7 +737,6 @@ onAuthStateChanged(auth, async function(utilisateur) {
 
     const userData = await obtenirUtilisateurFirestore(utilisateur.uid);
 
-    // Contrôle du bannissement
     if (userData?.banJusqua) {
       const maintenant = Date.now();
       const timestampBan = typeof userData.banJusqua === 'number'

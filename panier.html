@@ -68,11 +68,12 @@
 
 <script type="module">
   // =========================================================
-  // MON PANIER
+  // MON PANIER & FORMSUBMIT
   // =========================================================
 
-  import { auth, authReady } from './firebase-config.js';
+  import { auth, db } from './firebase-config.js';
   import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js';
+  import { collection, addDoc } from 'https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js';
   import {
     ecouterPanier,
     retirerDuPanier,
@@ -92,10 +93,6 @@
 
   let articlesCourants = [];
   let totalCourant = 0;
-
-  // ---------------------------------------------------------
-  // Convertir un prix affiché ("24,90 €") en nombre
-  // ---------------------------------------------------------
 
   function analyserPrix(texte) {
     let chaineAAnalyser = String(texte).trim();
@@ -118,10 +115,6 @@
     return nombre.toFixed(2).replace('.', ',') + ' €';
   }
 
-  // ---------------------------------------------------------
-  // Afficher les articles du panier
-  // ---------------------------------------------------------
-
   function afficherArticles(articles) {
     blocChargement.classList.add('hidden');
     articlesCourants = articles;
@@ -143,7 +136,6 @@
       })
       .join('');
 
-    // Boutons "Retirer"
     grille.querySelectorAll('[data-retirer]').forEach(function(bouton) {
       bouton.addEventListener('click', async function() {
         bouton.disabled = true;
@@ -159,7 +151,6 @@
       });
     });
 
-    // Sélecteurs de quantité
     grille.querySelectorAll('.quantite-selecteur[data-produit-id]').forEach(function(selecteur) {
       const id = selecteur.dataset.produitId;
       const champ = selecteur.querySelector('.quantite-champ');
@@ -188,17 +179,12 @@
       });
     });
 
-    // Calcul du total
     totalCourant = articles.reduce(function(somme, article) {
       return somme + analyserPrix(article.prix) * (article.quantite || 1);
     }, 0);
 
     montantTotal.textContent = formaterPrix(totalCourant);
   }
-
-  // ---------------------------------------------------------
-  // Overlay / Modale de confirmation de commande
-  // ---------------------------------------------------------
 
   function fermerModaleCommande() {
     const overlay = document.getElementById('modale-commande');
@@ -262,17 +248,29 @@
     caseArgent.addEventListener('change', verifierCases);
     caseConditions.addEventListener('change', verifierCases);
 
-    // Clic sur Commander
     boutonConfirmer.addEventListener('click', async function() {
       boutonConfirmer.disabled = true;
       boutonConfirmer.textContent = 'Envoi en cours...';
 
       try {
-        await envoyerCommande();
-        fermerModaleCommande();
-        window.location.href = 'merci.html';
+        const snapshotArticles = [...articlesCourants];
+
+        // 1. Enregistrement dans Firestore pour que l'admin puisse récupérer le fichier .3mf
+        await addDoc(collection(db, 'commandes_attente'), {
+          email_compte: utilisateurCourant.email,
+          articles: snapshotArticles,
+          prix_total: formaterPrix(totalCourant),
+          date_commande: new Date().toISOString()
+        });
+
+        // 2. Vider le panier de l'utilisateur
+        await viderPanierAvantEnvoi();
+
+        // 3. Déclenchement de l'e-mail via FormSubmit
+        soumettreViaFormSubmit(snapshotArticles);
       } catch (erreur) {
-        console.error("Impossible d'envoyer la commande :", erreur);
+        console.error("Erreur lors de la commande :", erreur);
+        alert("Une erreur est survenue lors de l'envoi de la commande.");
         boutonConfirmer.disabled = false;
         boutonConfirmer.textContent = 'Commander';
       }
@@ -294,7 +292,6 @@
     }
   }
 
-  // Écouteur global pour fermer la modale au clic sur Annuler ou en dehors
   document.addEventListener('click', function(e) {
     const overlay = document.getElementById('modale-commande');
     if (!overlay || overlay.classList.contains('hidden') || overlay.style.display === 'none') return;
@@ -305,50 +302,54 @@
     }
   });
 
-  // Touche Échap
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
       fermerModaleCommande();
     }
   });
 
-  // ---------------------------------------------------------
-  // Envoi de la commande
-  // ---------------------------------------------------------
-
-  async function envoyerCommande() {
-    const detailArticles = articlesCourants
-      .map(function(article) {
-        return article.nom + ' — quantité ' + (article.quantite || 1) + ' — ' + article.prix;
-      })
-      .join('\n');
-
-    await fetch('https://formsubmit.co/ajax/gabriel.gauthier@stjo41.fr', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        _subject: 'Nouvelle commande Gabshop (panier)',
-        _template: 'table',
-        email_compte: utilisateurCourant.email,
-        articles: detailArticles,
-        prix_total: formaterPrix(totalCourant),
-        date_commande: new Date().toLocaleString('fr-FR')
-      })
-    });
-
+  async function viderPanierAvantEnvoi() {
     for (const article of articlesCourants) {
       await retirerDuPanier(utilisateurCourant.uid, article.id);
     }
   }
 
-  boutonCommander.addEventListener('click', ouvrirModaleCommande);
+  function soumettreViaFormSubmit(articlesAEnvoyer) {
+    const detailArticles = articlesAEnvoyer.map(function(article) {
+      let ligne = `${article.nom} — quantité ${article.quantite || 1} — ${article.prix}`;
+      if (article.fichierNom) {
+        ligne += ` [Fichier 3D : ${article.fichierNom}]`;
+      }
+      return ligne;
+    }).join('\n');
 
-  // ---------------------------------------------------------
-  // Connexion Firebase
-  // ---------------------------------------------------------
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = 'https://formsubmit.co/gabriel.gauthier@stjo41.fr';
+
+    const champs = {
+      '_subject': 'Nouvelle commande Gabshop',
+      '_template': 'table',
+      '_next': window.location.origin + '/merci.html',
+      'email_client': utilisateurCourant.email,
+      'articles': detailArticles,
+      'prix_total': formaterPrix(totalCourant),
+      'date_commande': new Date().toLocaleString('fr-FR')
+    };
+
+    for (const [key, value] of Object.entries(champs)) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = key;
+      input.value = value;
+      form.appendChild(input);
+    }
+
+    document.body.appendChild(form);
+    form.submit();
+  }
+
+  boutonCommander.addEventListener('click', ouvrirModaleCommande);
 
   onAuthStateChanged(auth, function(utilisateur) {
     if (desabonnerPanier) {
@@ -362,7 +363,7 @@
     }
 
     utilisateurCourant = utilisateur;
-    desabonnerPanier = ecouterPanier(utilisateur.uid, afficherArticles);
+    desabonnerPanier = ecouterPanier(utilisateurCourant.uid, afficherArticles);
   });
 </script>
 
